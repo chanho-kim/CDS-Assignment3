@@ -2,3 +2,6 @@
 /Client.class
 /Server$TCP.class
 /Server$UDP.class
+/Server$UDP$UDPThread.class
+/TCP.class
+/UDP.class
