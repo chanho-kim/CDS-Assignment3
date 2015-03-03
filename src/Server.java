@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -17,11 +18,14 @@ public class Server {
 	
 	static AtomicIntegerArray books;
 	
-	public static void main2(String args[]){
+	public static void main(String args[]){
 		try {
 			BufferedReader br = new BufferedReader(new FileReader(new File(args[0])));
 		    for(String line; (line = br.readLine()) != null;) {
+		    	//Read the input
 		        String[] command = line.split(" ");
+		        
+		        //How many books?
 		        books = new AtomicIntegerArray(Integer.valueOf(command[0]));
 		        
 		        //Initialize all the books to -1
@@ -29,12 +33,12 @@ public class Server {
 		        	books.set(i, -1);
 		        }
 		        
+		        //Which ports for UDP and TCP?
 		        Thread u = new Thread(new UDP(Integer.valueOf(command[1])));
 		        Thread t = new Thread(new TCP(Integer.valueOf(command[2])));
 		        
 		        u.start();
-		        t.start();
-		        
+		        t.start();      
 		    }
 			br.close();		
 		} catch (Exception e) {
@@ -61,35 +65,46 @@ class UDP implements Runnable{
 	public void run(){
 		while(true){
 			try {
+				//Initialization
 				String sendData = "";
 				byte[] receiveData = new byte[1024];
+				
+				//Establish connection
 				Rpacket = new DatagramPacket(receiveData, receiveData.length);
-				System.out.println("UDP Listening on port " + socket.getLocalPort());
 				socket.receive(Rpacket);
-				System.out.println("Received: " + Rpacket.toString());
 				InetAddress IPAddress = Rpacket.getAddress();
 				int Rport = Rpacket.getPort();
-				String in = new String(Rpacket.getData());
+				
+				//Receive the data
+				String in = new String(Rpacket.getData()).trim();
 				String[] command = in.split(" ");
+				
 				//Get the client index & book index
 				int client = Integer.parseInt(command[0].replaceAll("[\\D]", ""));
 				int bookIndex = Integer.parseInt(command[1].replaceAll("[\\D]", ""));
+				
+				//Reserve or return?
 				if(command[2].equals("reserve")){
-					if(Server.books.compareAndSet(bookIndex, -1, client)){
+					//if the book is not reserved yet, mark it with client's ID
+					if(Server.books.compareAndSet(bookIndex-1, -1, client)){
 						sendData = command[0] + " b" + bookIndex;
 					}
 					else{
-						sendData = "fail " + command[0] + " b" + bookIndex;
+						sendData = "fail " + command[0] + " b" + bookIndex ;
 					}
 				}
+				
 				else if(command[2].equals("return")){
-					if(Server.books.compareAndSet(bookIndex, client, -1)){
+					//if the book is marked with client's ID, free it
+					if(Server.books.compareAndSet(bookIndex-1, client, -1)){
 						sendData = "free " + command[0] + " b" + bookIndex;
 					}
 					else{
 						sendData = "fail " + command[0] + " b" + bookIndex;
 					}
 				}
+				
+				//Send the result back
 				Spacket = new DatagramPacket(sendData.getBytes(), sendData.getBytes().length, IPAddress, Rport);
 				socket.send(Spacket);
 			} catch (IOException e) {
@@ -105,7 +120,9 @@ class TCP implements Runnable {
 	
 	TCP(int port){
 		try {
+		
 			socket = new ServerSocket(port);
+
 		} catch (IOException e) {
 			System.out.println("Socket initialization failed.");
 			e.printStackTrace();
@@ -115,34 +132,45 @@ class TCP implements Runnable {
 	public void run(){
 		while(true){
 			try {
+				//Initialization
 				String sendData = "";
-				System.out.println("TCP Listening on port " + socket.getLocalPort());
+				
+				//Establish connection
 				Socket s = socket.accept();
 				BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));
 				DataOutputStream out = new DataOutputStream(s.getOutputStream());
+				
+				//Receive the data
 				String inString = in.readLine();
-				System.out.println("Received: " + inString);
 				String[] command = inString.split(" ");
+				
 				//Get the client index & book index
 				int client = Integer.parseInt(command[0].replaceAll("[\\D]", ""));
 				int bookIndex = Integer.parseInt(command[1].replaceAll("[\\D]", ""));
+				
+				//Reserve or return?
 				if(command[2].equals("reserve")){
-					if(Server.books.compareAndSet(bookIndex, -1, client)){
-						sendData = command[0] + " b" + bookIndex;
+					//if the book is not reserved yet, mark it with client's ID					
+					if(Server.books.compareAndSet(bookIndex-1, -1, client)){
+						sendData = command[0] + " b" + bookIndex + '\n';
 					}
 					else{
-						sendData = "fail " + command[0] + " b" + bookIndex;
+						sendData = "fail " + command[0] + " b" + bookIndex + '\n';
 					}
 				}
+				
 				else if(command[2].equals("return")){
-					if(Server.books.compareAndSet(bookIndex, client, -1)){
-						sendData = "free " + command[0] + " b" + bookIndex;
+					//if the book is marked with client's ID, free it					
+					if(Server.books.compareAndSet(bookIndex-1, client, -1)){
+						sendData = "free " + command[0] + " b" + bookIndex + '\n';
 					}
 					else{
-						sendData = "fail " + command[0] + " b" + bookIndex;
+						sendData = "fail " + command[0] + " b" + bookIndex + '\n';
 					}
 				}
-				out.write(sendData.getBytes());					
+				
+				//Send the result back
+				out.writeBytes(sendData);					
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
